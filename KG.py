@@ -52,6 +52,9 @@ class KG:
 
     def new_construct(self, word_idx, feature, vocabulary, num_word):
                 # Construct K_(t-1) from KG_(t-1)
+        print(feature.shape)
+        print(num_word)
+        #print(vocabulary)
         K = numpy.zeros((num_word, num_word), dtype='float64')
         # for evey pair(x, y) of vacabulary, K[x][y] = E(x, y) / max_(x,y)(E(x, y))
         maxedge = 1
@@ -66,6 +69,7 @@ class KG:
                         K[i][j] = K[j][i] = cosine_similarity([feature[word_idx[a]],feature[word_idx[b]]])[0][1]
                         maxedge = max(maxedge, K[i][j])
         K /= maxedge
+        return K
     
     def save_to_file(self):
         pass

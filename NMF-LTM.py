@@ -12,16 +12,35 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+import argparse
 
 import KG
 import utils
 
 from spectral import affinity, clustering
 
-metrics = ["c_v", "c_npmi", "c_uci", "u_mass"]
-# AGNews
-label = ["Business", "Entertainment", "Europe", "Health", "Sci", "Sports", "U", "World"]  # Sci: Sci & Tech;  U: U.S.A
 
+metrics = ["c_v", "c_npmi", "c_uci", "u_mass"]
+
+# AGNews
+#label = ["Business", "Entertainment", "Europe", "Health", "Sci", "Sports", "U", "World"]  # Sci: Sci & Tech;  U: U.S.A
+
+def parseArgs():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataDir", type = str)
+    parser.add_argument("--dataset", type = str, nargs = "+")
+    parser.add_argument("--featureDim", type = int)
+    parser.add_argument("--topic", type = int) 
+    parser.add_argument("--maxStep", type = int) 
+    parser.add_argument("--alpha", type = float)
+    parser.add_argument("--beta", type = float)
+    parser.add_argument("--gamma", type = float)
+    parser.add_argument("--lambda_", type = float)
+    parser.add_argument("--eps", type = float)
+    #0 - base, 1 - spectral clustering, 2 - gcn
+    parser.add_argument("--mode", type = int)
+    
+    return parser.parse_args()
 
 def tfidf(Dt_path):
     vectorizer = CountVectorizer()
@@ -147,12 +166,12 @@ def construct_C(path):
     return C
 
 
-def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, lambda_, eps, dataname):
+def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, lambda_, eps, featureDim ,dataname, mode):
     
-    if not os.path.exists("Log_NMF-LTM"):
-        os.mkdir("Log_NMF-LTM")
-    log_file = os.path.join("Log_NMF-LTM", "log.txt")
-    topic_words_file = os.path.join("Log_NMF-LTM", "topic_words.txt")
+    if not os.path.exists("../Log"):
+        os.mkdir("../Log")
+    log_file = os.path.join("../Log", "log.txt")
+    topic_words_file = os.path.join("../Log", "topic_words.txt")
     
     log_files = [log_file, topic_words_file]
     for f in log_files:
@@ -165,9 +184,9 @@ def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, la
                         max_step=max_step, num_word_topic=num_word_topic, top_n=top_n,
                         alpha=alpha, beta=beta, gamma=gamma, lambda_=lambda_, eps=eps) + "\n")
     
-    if not os.path.exists("Res_NMF-LTM"):
-        os.mkdir("Res_NMF-LTM")
-    result_path = os.path.join("Res_NMF-LTM", dataname)
+    if not os.path.exists("../Result"):
+        os.mkdir("../Result")
+    result_path = os.path.join("../Result", dataname)
     if not os.path.exists(result_path):
         os.mkdir(result_path)
 
@@ -209,12 +228,16 @@ def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, la
         # 尺寸需要和Dt一致
         print('constructing W(t-1) ...')
         # K = numpy.zeros((num_word, num_word), dtype='float64')
-        word_idx, idx_word, adj = kg.graph_to_mat()
-        print(adj.shape)
-        if(adj.shape[0] > 0):
-            feature = clustering.spectral_clustering(adj, 6)
-            W = kg.new_construct(word_idx, feature, vocabulary, num_word)
-        else:
+        if mode == 0:
+            W = kg.construct(vocabulary, num_word)
+        elif mode == 1:
+            word_idx, idx_word, adj = kg.graph_to_mat()
+            if(adj.shape[0] > 0):
+                feature = clustering.spectral_clustering(adj, featureDim)
+                W = kg.new_construct(word_idx, feature, vocabulary, num_word)
+            else:
+                W = kg.construct(vocabulary, num_word)
+        elif mode == 2:
             W = kg.construct(vocabulary, num_word)
 
         #diag(K_(t-1)1)
@@ -278,6 +301,7 @@ def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, la
         
         # evaluate classification
         # 随机80%训练，20%测试
+        '''
         print('performing downstream classification ...')
         classes = numpy.array(label)
         # use V_t for classifications
@@ -291,7 +315,7 @@ def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, la
     # final results    
     print(scores_topic)
     print(scores_clf)
-    
+    '''
     with open(log_file, "a") as fobj:
         for metric in metrics:
             fobj.write("U: " + metric + "\n")
@@ -305,25 +329,28 @@ def NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, la
 if __name__ == '__main__':
 
     # 可期望pipeline由运行函数确定
-    dataname = "20News"
-    pipeline = ["20news_{chunk_id}".format(chunk_id = chunk_id) for chunk_id in range(1,6)]
+    args = parseArgs()
+    dataname = args.dataDir#"20News"
+    pipeline = args.dataset#["20news_{chunk_id}".format(chunk_id = chunk_id) for chunk_id in range(1,6)]
     
     pipeline = [os.path.join("../Dataset", dataname, filename) for filename in pipeline]
     
     T = len(pipeline)
-    max_step = 200
+    max_step = args.maxStep
     # max_step = 20   # for test
-    num_word_topic = 20
-    top_n = 20  # 主题词数目
-    alpha = 10
-    beta = 0 #0.5
-    gamma = 0 #0.001
-    lambda_ = 0 #0.001
-    eps = 1e-7
-    
-    print("max_step {max_step}, num_word_topic {num_word_topic}, top_n {top_n}, "
-              "alpha {alpha}, beta {beta}, gamma {gamma}, lambda_ {lambda_}, eps {eps}.".format(
-            max_step=max_step, num_word_topic=num_word_topic, top_n=top_n,
-            alpha=alpha, beta=beta, gamma=gamma, lambda_=lambda_, eps=eps) + "\n")
+    num_word_topic = args.topic
+    top_n = args.topic  # 主题词数目
+    alpha = args.alpha #10
+    beta = args.beta #0.5
+    gamma = args.gamma #0.001
+    lambda_ = args.lambda_ #0.001
+    eps = args.eps #1e-7
+    featureDim = args.featureDim
+    mode = args.mode
 
-    NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, lambda_, eps, dataname)
+    print("max_step {max_step}, num_word_topic {num_word_topic}, top_n {top_n}, "
+              "alpha {alpha}, beta {beta}, gamma {gamma}, lambda_ {lambda_}, eps {eps} featureDim {featureDim}.".format(
+            max_step=max_step, num_word_topic=num_word_topic, top_n=top_n,
+            alpha=alpha, beta=beta, gamma=gamma, lambda_=lambda_, eps=eps, featureDim=featureDim) + "\n")
+
+    NMF_LTM(T, max_step, pipeline, num_word_topic, top_n, alpha, beta, gamma, lambda_, eps, featureDim, dataname, mode)

@@ -22,7 +22,10 @@ def spectral_clustering(affinity, n_clusters, cluster_method=k_means):
     L = laplacian(affinity)
     eig_val, eig_vect = scipy.sparse.linalg.eigs(L, n_clusters)
     X = eig_vect.real
+    '''
     rows_norm = numpy.linalg.norm(X, axis=1, ord=2)
     Y = (X.T / rows_norm).T
     labels = cluster_method(Y, n_clusters)
     return labels
+    '''
+    return X
